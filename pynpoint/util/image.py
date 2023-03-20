@@ -149,12 +149,14 @@ def rotate_images(images: np.ndarray,
 
 
 @typechecked
-def create_mask(im_shape: Tuple[int, int],
+def create_mask_depr(im_shape: Tuple[int, int],
                 size: Union[Tuple[float, float],
                             Tuple[float, None],
                             Tuple[None, float],
                             Tuple[None, None]]) -> np.ndarray:
     """
+    Deprecated version, see create_mask for new version.
+    
     Function to create a mask for the central and outer image regions.
 
     Parameters
@@ -187,6 +189,58 @@ def create_mask(im_shape: Tuple[int, int],
             mask[rr_grid < size[0]] = 0.
 
         if size[1] is not None:
+            if size[1] > npix / 2:
+                size = (size[0], npix / 2)
+            mask[rr_grid > size[1]] = 0.
+
+    return mask
+
+
+def create_mask(im_shape: Tuple[int, int],
+                size: Union[Tuple[float, float],
+                            Tuple[float, None],
+                            Tuple[None, float],
+                            Tuple[None, None]]) -> np.ndarray:
+    """
+    Function to create a mask for the central and outer image regions.
+
+    Parameters
+    ----------
+    im_shape : tuple(int, int)
+        Image size in both dimensions.
+    size : tuple(float, float)
+        Size (pix) of the inner and outer mask.
+
+    Returns
+    -------
+    np.ndarray
+        Image mask.
+    """
+
+    mask = np.ones(im_shape)
+    npixx = im_shape[0]
+    npixy = im_shape[1]
+    
+    def create_grid(npix):
+        if npix % 2 == 0:
+            grid = np.linspace(-npix / 2 + 0.5, npix / 2 - 0.5, npix)
+        else:
+            grid = np.linspace(-(npix - 1) / 2, (npix - 1) / 2, npix)
+        return grid
+
+    if size[0] is not None or size[1] is not None:
+
+        x_grid = create_grid(npixx)
+        y_grid = create_grid(npixy)
+
+        xx_grid, yy_grid = np.meshgrid(y_grid, x_grid)
+        rr_grid = np.sqrt(xx_grid**2 + yy_grid**2)
+
+        if size[0] is not None:
+            mask[rr_grid < size[0]] = 0.
+
+        if size[1] is not None:
+            npix = min(npixx,npixy)
             if size[1] > npix / 2:
                 size = (size[0], npix / 2)
             mask[rr_grid > size[1]] = 0.
