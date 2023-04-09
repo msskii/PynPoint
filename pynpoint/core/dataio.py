@@ -548,7 +548,6 @@ class InputPort(Port):
 
         if not self._check_error_cases():
             attr_val = None
-
         else:
             if name in self._m_data_storage.m_data_bank[self._m_tag].attrs:
                 # static attribute

@@ -20,7 +20,7 @@ from typeguard import typechecked
 
 import pynpoint
 
-from pynpoint.core.attributes import get_attributes
+from pynpoint.core.attributes_JWST import get_attributes
 from pynpoint.core.dataio import DataStorage
 from pynpoint.core.processing import ProcessingModule, PypelineModule, ReadingModule, WritingModule
 from pynpoint.util.module import input_info, module_info, output_info
@@ -281,7 +281,7 @@ class Pypeline:
         config_file = os.path.join(self._m_working_place, 'PynPoint_config.ini')
         print(f'Configuration: {config_file}\n')
 
-        attributes = get_attributes()
+        attributes = get_attributes(instrument_key="MIRI")
         attributes['CPU']['value'] = multiprocessing.cpu_count()
 
         if not os.path.isfile(config_file):
@@ -714,6 +714,7 @@ class Pypeline:
         self.m_data_storage.open_connection()
 
         tags = list(self.m_data_storage.m_data_bank.keys())
+
 
         selected_tags = []
 

@@ -9,7 +9,8 @@ import numpy as np
 from astropy.io import fits
 from typeguard import typechecked
 
-from pynpoint.core.attributes import get_attributes
+# from pynpoint.core.attributes import get_attributes
+from pynpoint.core.attributes_JWST import get_attributes
 from pynpoint.core.dataio import ConfigPort, OutputPort
 
 
@@ -43,7 +44,7 @@ def set_static_attr(fits_file: str,
         None
     """
 
-    attributes = get_attributes()
+    attributes = get_attributes(instrument_key="MIRI")
 
     static = []
     for key, value in attributes.items():
@@ -100,7 +101,7 @@ def set_nonstatic_attr(header: fits.header.Header,
         None
     """
 
-    attributes = get_attributes()
+    attributes = get_attributes(instrument_key="MIRI")
 
     nonstatic = []
     for key, value in attributes.items():
