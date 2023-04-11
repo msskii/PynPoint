@@ -97,6 +97,8 @@ from pynpoint.readwrite.textwriting import TextWritingModule
 
 from pynpoint.readwrite.nearreading import NearReadingModule
 
+from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
+
 warnings.simplefilter('always', DeprecationWarning)
 
 __author__ = 'Tomas Stolker & Markus Bonse'
