@@ -125,20 +125,41 @@ class PrimaryHDUCombiner(ReadingModule):
         """
         
         hdu_list = fits.open(fits_file)
+        n = len(hdu_list)
         filename = "col_" + os.path.basename(fits_file)
         hdr = fits.Header()
         
-        hdr.extend(hdu_list[0].header)
-        hdr.extend(hdu_list[1].header)
+        assert n>0, f'The file {fits_file} did not contain any data. '
         
-        data = hdu_list[1].data.byteswap().newbyteorder()
+        if len(hdu_list[0].header) > 0:
+            hdr.extend(hdu_list[0].header)
+        if len(hdu_list) > 1 and len(hdu_list[1].header) > 0:
+            hdr.extend(hdu_list[1].header)
+        if len(hdr) == 0:
+            raise ValueError(f'No header information found in {fits_file}.')
+        
+        if hdu_list[0].data is not None:
+            images = hdu_list[0].data.byteswap().newbyteorder()
+            
+        elif len(hdu_list) > 1:
+            for i, item in enumerate(hdu_list[1:]):
+                if isinstance(item, fits.hdu.image.ImageHDU):
+                    warnings.simplefilter('always', UserWarning)
+
+                    warnings.warn(f"No data was found in the PrimaryHDU "
+                                  f"so reading data from the ImageHDU "
+                                  f"at number {i+1} instead.")
+
+                    images = hdu_list[i+1].data.byteswap().newbyteorder()
+
+                    break
         
         hdu_list.close()
         
         assert os.path.isdir(out_path), f'The data out path: {out_path} , does not exist. '
         
         fits.writeto(os.path.join(out_path, filename), 
-                     data = data,
+                     data = images,
                      header = hdr,
                      overwrite=overwrite)
         
