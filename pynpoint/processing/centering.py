@@ -279,8 +279,8 @@ class FitCenterModule(ProcessingModule):
 
         memory = self._m_config_port.get_attribute('MEMORY')
         cpu = self._m_config_port.get_attribute('CPU')
-        pixscale = self.m_image_in_port.get_attribute('PIXSCALE')
-
+        pixscale = self.m_image_in_port.get_attribute('PIXSCALE')[0]
+        wavelength = self.m_image_in_port.get_attribute('WAV_INCR')
         if cpu > 1 and self.m_mask_out_port is not None:
             warnings.warn('The mask_out_port can only be used if CPU=1. No data will be '
                           'stored to this output port.')
@@ -290,6 +290,7 @@ class FitCenterModule(ProcessingModule):
 
         if self.m_mask_radii[0] is None:
             # Convert from arcsec to pixels and change None to 0
+
             self.m_mask_radii = (0., self.m_mask_radii[1]/pixscale)
 
         else:

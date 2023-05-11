@@ -19,11 +19,7 @@ def get_attributes(instrument_key="Default") -> Dict[str, Dict[str, Union[str, f
     """
     
     if instrument_key == "MIRI":
-        attr = {'PIXSCALE': {'attribute': 'static',
-                             'config': 'settings',
-                             'value': 0.027,
-                             'type': 'float'},
-                'MEMORY': {'attribute': 'static',
+        attr = {'MEMORY': {'attribute': 'static',
                            'config': 'settings',
                            'value': 1000,
                            'type': 'int'},
@@ -95,6 +91,10 @@ def get_attributes(instrument_key="Default") -> Dict[str, Dict[str, Union[str, f
                                'config': 'header',
                                'value': 'None',
                                'type': 'float'},
+                'PIXSCALE': {'attribute': 'non-static',
+                             'config': 'header',
+                             'value': 'None',
+                             'type': 'float'},
                 'STAR_POSITION': {'attribute': 'non-static',
                                   'config': None,
                                   'value': None,

@@ -157,14 +157,11 @@ def set_extra_attr(fits_file: str,
         First image index for the next subset.
     """
 
-    pixscale = config_port.get_attribute('PIXSCALE')
-
     image_index = np.arange(first_index, first_index+nimages, 1)
 
     for item in image_index:
         image_out_port.append_attribute_data('INDEX', item)
 
     image_out_port.append_attribute_data('FILES', fits_file)
-    image_out_port.add_attribute('PIXSCALE', pixscale, static=True)
 
     return first_index + nimages
