@@ -99,6 +99,8 @@ from pynpoint.readwrite.nearreading import NearReadingModule
 
 from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
 
+from pynpoint.readwrite.JWSTreader import MultiChannelReader
+
 warnings.simplefilter('always', DeprecationWarning)
 
 __author__ = 'Tomas Stolker & Markus Bonse'

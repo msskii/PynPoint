@@ -25,6 +25,7 @@ from pynpoint.core.dataio import DataStorage
 from pynpoint.core.processing import ProcessingModule, PypelineModule, ReadingModule, WritingModule
 from pynpoint.util.module import input_info, module_info, output_info
 from pynpoint.util.type_aliases import NonStaticAttribute, StaticAttribute
+from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
 
 
 class Pypeline:
@@ -328,6 +329,9 @@ class Pypeline:
         if isinstance(module, ReadingModule):
             if module.m_input_location is None:
                 module.m_input_location = self._m_input_place
+            if isinstance(module, PrimaryHDUCombiner):
+                if module.m_output_location is None:
+                    module.m_output_location = self._m_output_place
 
         if isinstance(module, WritingModule):
             if module.m_output_location is None:
