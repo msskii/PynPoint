@@ -20,16 +20,13 @@ from pynpoint.util.module import progress
 class PrimaryHDUCombiner(ReadingModule):
     """
     Combines headers from primary HDU and secondary HDU of a fits file, if there is only data saved
-    in one of the two HDU's but there is header data saved in both. If
-    Reads FITS files from the given *input_dir* or the default directory of the Pypeline. The FITS
-    files need to contain either single images (2D) or cubes of images (3D). Individual images
-    should have the same shape and type. The header of the FITS is scanned for the required static
-    attributes (should be identical for each FITS file) and non-static attributes. Static entries
-    will be saved as HDF5 attributes while non-static attributes will be saved as separate data
-    sets in a subfolder of the database named *header_* + image_tag. If the FITS files in the input
-    directory have changing static attributes or the shape of the input images is changing a
-    warning appears. FitsReadingModule overwrites by default all existing data with the same tags
-    in the central database.
+    in one of the two HDU's but there is header data saved in both. If the data is not located in 
+    the PrimaryHDU a warning can be displayed by setting primarywarn to True. The data is written to
+    a FITS file with the data in the PrimaryHDU and the header information from the PrimaryHDU and
+    the HDU containing the data also saved in the PrimaryHDU. The generated FITS file is written to
+    output_dir with the identical name as the input and optionally with "col_" prepended to the 
+    file name if change_name is set to True; 
+    old files with the same name are overwritten if overwrite is set to True.
     """
     
     __author__ = 'Gian Rungger'
@@ -39,9 +36,10 @@ class PrimaryHDUCombiner(ReadingModule):
                  name_in: str,
                  input_dir: Optional[str] = None,
                  output_dir: Optional[str] = None,
-                 image_tag: str = 'im_arr',
                  filenames: Optional[Union[str, List[str]]] = None,
-                 overwrite: bool = False) -> None:
+                 change_name: Optional[bool] = True,
+                 overwrite: bool = False,
+                 primarywarn: Optional[bool] = False) -> None:
         """
         Parameters
         ----------
@@ -53,17 +51,18 @@ class PrimaryHDUCombiner(ReadingModule):
         output_dir : str, None
             Output directory where the collapsed FITS files are written to. If not specified 
             the Pypeline default directory is used.
-        image_tag : str
-            Tag of the read data in the HDF5 database. Non static header information is stored with
-            the tag: *header_* + image_tag / header_entry_name.
         filenames : str, list(str, ), None
             If a string, then a path of a text file should be provided. This text file should
             contain a list of FITS files. If a list, then the paths of the FITS files should be
             provided directly. If set to None, the FITS files in the `input_dir` are read. All
             paths should be provided either relative to the Python working folder (i.e., the folder
             where Python is executed) or as absolute paths.
+        change_name : bool
+            Prepend "col_" to the filename when saving it to the output directory.
         overwrite : bool
             Overwrite existing data.
+        primarywarn : bool
+            Warn if no data in PrimaryHDU.
 
         Returns
         -------
@@ -72,13 +71,13 @@ class PrimaryHDUCombiner(ReadingModule):
         """
 
         super().__init__(name_in, input_dir=input_dir)
-
-        self.m_image_out_port = self.add_output_port(image_tag)
         
-        self.m_output_dir = output_dir
+        self.m_output_location = output_dir
         
         self.m_filenames = filenames
+        self.m_change_name = change_name
         self.m_overwrite = overwrite
+        self.m_primarywarn = primarywarn
         
     @typechecked
     def _txt_file_list(self) -> list:
@@ -105,7 +104,8 @@ class PrimaryHDUCombiner(ReadingModule):
                                out_path: Optional[str] = None,
                                overwrite: bool = False) -> None:
         """
-        Function that reads in a 
+        Function that reads in a single FITS file and collapses the data and headers
+        to the primary HDU of a new FITS file, which it then saves to out_path
         
 
         Parameters
@@ -126,33 +126,44 @@ class PrimaryHDUCombiner(ReadingModule):
         
         hdu_list = fits.open(fits_file)
         n = len(hdu_list)
-        filename = "col_" + os.path.basename(fits_file)
-        hdr = fits.Header()
+        if self.m_change_name:
+            filename = "col_" + os.path.basename(fits_file)
+        else:
+            filename = os.path.basename(fits_file)
         
         assert n>0, f'The file {fits_file} did not contain any data. '
         
-        if len(hdu_list[0].header) > 0:
-            hdr.extend(hdu_list[0].header)
-        if len(hdu_list) > 1 and len(hdu_list[1].header) > 0:
-            hdr.extend(hdu_list[1].header)
-        if len(hdr) == 0:
-            raise ValueError(f'No header information found in {fits_file}.')
+        hdr = fits.Header()
         
         if hdu_list[0].data is not None:
             images = hdu_list[0].data.byteswap().newbyteorder()
+            theone = 0
             
         elif len(hdu_list) > 1:
             for i, item in enumerate(hdu_list[1:]):
                 if isinstance(item, fits.hdu.image.ImageHDU):
-                    warnings.simplefilter('always', UserWarning)
-
-                    warnings.warn(f"No data was found in the PrimaryHDU "
-                                  f"so reading data from the ImageHDU "
-                                  f"at number {i+1} instead.")
+                    if self.m_primarywarn:
+                        warnings.simplefilter('always', UserWarning)
+    
+                        warnings.warn(f"No data was found in the PrimaryHDU "
+                                      f"so reading data from the ImageHDU "
+                                      f"at number {i+1} instead.")
 
                     images = hdu_list[i+1].data.byteswap().newbyteorder()
+                    theone = i+1
 
                     break
+        
+        if theone == 0:
+            k = 1
+        else:
+            k = 0
+        if len(hdu_list[theone].header) > 0:
+            hdr.extend(hdu_list[theone].header,unique=True)
+        if len(hdu_list) > 1 and len(hdu_list[k].header) > 0:
+            hdr.extend(hdu_list[k].header,unique=True)
+        if len(hdr) == 0:
+            raise ValueError(f'No header information found in {fits_file}.')
         
         hdu_list.close()
         
@@ -205,15 +216,11 @@ class PrimaryHDUCombiner(ReadingModule):
 
         start_time = time.time()
         for i, fits_file in enumerate(files):
-            progress(i, len(files), 'Reading FITS files...', start_time)
+            progress(i, len(files), 'Collapsing FITS files...', start_time)
 
-            self.collapse_to_PrimaryHDU(fits_file, self.m_output_dir, self.m_overwrite)
+            self.collapse_to_PrimaryHDU(fits_file, self.m_output_location, self.m_overwrite)
 
             first_index += 1
-
-            self.m_image_out_port.flush()
-
-        self.m_image_out_port.close_port()
         
         
         

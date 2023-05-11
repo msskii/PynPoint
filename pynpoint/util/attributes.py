@@ -13,6 +13,8 @@ from typeguard import typechecked
 from pynpoint.core.attributes_JWST import get_attributes
 from pynpoint.core.dataio import ConfigPort, OutputPort
 
+from typing import Optional
+
 
 @typechecked
 def set_static_attr(fits_file: str,
@@ -134,7 +136,8 @@ def set_extra_attr(fits_file: str,
                    nimages: int,
                    config_port: ConfigPort,
                    image_out_port: OutputPort,
-                   first_index: int) -> int:
+                   first_index: int,
+                   optional_attrs: list = []) -> int:
     """
     Function which adds extra attributes to the central database.
 
@@ -146,10 +149,15 @@ def set_extra_attr(fits_file: str,
         Number of images.
     config_port : pynpoint.core.dataio.ConfigPort
         Configuration port.
+    header_out_port : pynpoint.core.dataio.OutputPort
+        Output port where additional header information is stored.
     image_out_port : pynpoint.core.dataio.OutputPort
         Output port of the images to which the attributes are stored.
     first_index : int
         First image index of the current subset.
+    optional_attrs : list
+        Any additional non-static attributes to be added to the attributes list
+        can be added as a list of tuples with key (str) and value
 
     Returns
     -------
@@ -163,5 +171,8 @@ def set_extra_attr(fits_file: str,
         image_out_port.append_attribute_data('INDEX', item)
 
     image_out_port.append_attribute_data('FILES', fits_file)
+
+    for (key,value) in optional_attrs:
+        image_out_port.add_attribute(key,value,static=False)
 
     return first_index + nimages
