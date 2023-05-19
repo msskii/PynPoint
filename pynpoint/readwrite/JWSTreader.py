@@ -8,7 +8,7 @@ import os
 import shutil
 import time
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict
 import string
 import warnings
 
@@ -18,7 +18,7 @@ from astropy.io import fits
 from typeguard import typechecked
 
 from pynpoint.core.processing import ReadingModule
-from pynpoint.util.attributes import set_static_attr, set_nonstatic_attr, set_extra_attr
+from pynpoint.util.attributes import set_static_attr_JWST, set_nonstatic_attr_JWST, set_extra_attr_JWST
 from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
 from pynpoint.util.module import progress
 
@@ -77,7 +77,8 @@ class MultiChannelReader(ReadingModule):
         super().__init__(name_in, input_dir=input_dir)
 
         self.m_image_out_port = self.add_output_port(image_tag)
-
+        
+        self.m_img_tag = image_tag
         self.m_overwrite = overwrite
         self.m_check = check
         self.m_filenames = filenames
@@ -130,7 +131,7 @@ class MultiChannelReader(ReadingModule):
     @typechecked
     def read_files(self,
                          files: list,
-                         overwrite_tags: list) -> Tuple[fits.header.Header, tuple, np.ndarray, np.ndarray, np.ndarray]:
+                         overwrite_tags: list) -> Tuple[List[str],Dict, tuple, np.ndarray, np.ndarray, np.ndarray]:
         """
         Function which reads a single FITS file and appends it to the database. The function gets
         a list of *overwriting_tags*. If a new key (header entry or image data) is found that is
@@ -148,8 +149,10 @@ class MultiChannelReader(ReadingModule):
 
         Returns
         -------
-        astropy.io.fits.header.Header
-            FITS header.
+        List[str]
+            header as list
+        Dict
+            header as dictionary
         tuple(int, )
             Image shape.
         np.ndarray
@@ -264,6 +267,7 @@ class MultiChannelReader(ReadingModule):
         
 
         fits_header = []
+        fits_dict = {}
         hdr_template = headers[0]
         for key in list(hdr_template.keys()):
             if '\n' in key:
@@ -277,20 +281,26 @@ class MultiChannelReader(ReadingModule):
                     tobeornottobe = False
             if key == 'NAXIS3':
                 fits_header.append(f'{key} = {N_wave}')
+                fits_dict[key] = N_wave
                 continue
             
             if tobeornottobe:
                 fits_header.append(f'{key} = {headers[0][key]}')
+                fits_dict[key] = headers[0][key]
             else:
-                card = np.zeros(N,dtype=str)
+                card = np.zeros(N,dtype=object)
                 for i in np.arange(N):
                     card[i] = headers[i][key]
+                card = card.astype('S') # convert to numpy bytes array which is compatible with HDF5 database
                 fits_header.append(f'{key} = {card}')
+                fits_dict[key] = card
         # New attributes:
         fits_header.append(f'WAV_ARR = {wavelength_arr}')
+        fits_dict['WAV_ARR'] = wavelength_arr
         fits_header.append(f'CHAN_ARR = {channel_arr}')
+        fits_dict['CHAN_ARR'] = channel_arr
         fits_header.append(f'BAND_ARR = {band_arr}')
-        
+        fits_dict['BAND_ARR'] = band_arr
         
         # now add the data cube to the database
         if data_cube.ndim == 4 and not self.m_ifs_data:
@@ -319,12 +329,12 @@ class MultiChannelReader(ReadingModule):
 
         hdu_list.close()
         
-        # TODO: naming the fits_header file path, atm the name of the first file in files is used
-        self.m_header_out_port = self.add_output_port('fits_header/'+os.path.basename(files[0]))
+        
+        self.m_header_out_port = self.add_output_port('fits_header/'+self.m_img_tag)
         header_out_port = self.m_header_out_port
         header_out_port.set_all(fits_header)
 
-        return header, data_cube.shape, wavelength_arr, channel_arr, band_arr
+        return fits_header, fits_dict, data_cube.shape, wavelength_arr, channel_arr, band_arr
 
     @typechecked
     def _txt_file_list(self) -> list:
@@ -411,7 +421,7 @@ class MultiChannelReader(ReadingModule):
         overwrite_tags = []
         first_index = 0
         print("Reading all data and headers into Pynpoint.")
-        header, shape, wav_arr, chan_arr, band_arr = self.read_files(files,overwrite_tags)
+        header,header_dict, shape, wav_arr, chan_arr, band_arr = self.read_files(files,overwrite_tags)
         
         if self.m_collapse:
             shutil.rmtree(tempout) # remove the temporary folder and the collapsed data
@@ -432,19 +442,19 @@ class MultiChannelReader(ReadingModule):
             raise ValueError('Data read from FITS file has an invalid shape.')
 
         print("Setting attributes in database.")
-        set_static_attr(fits_file=files[0],
-                        header=header,
+        set_static_attr_JWST(fits_file=files[0],
+                        header=header_dict,
                         config_port=self._m_config_port,
                         image_out_port=self.m_image_out_port,
                         check=self.m_check)
 
-        set_nonstatic_attr(header=header,
+        set_nonstatic_attr_JWST(header=header_dict,
                            config_port=self._m_config_port,
                            image_out_port=self.m_image_out_port,
                            check=self.m_check)
 
         wavandchan = [('WAV_ARR',wav_arr),('CHAN_ARR',chan_arr),('BAND_ARR',band_arr)]
-        set_extra_attr(fits_file=files[0],
+        set_extra_attr_JWST(fits_file=files[0],
                        nimages=nimages,
                        config_port=self._m_config_port,
                        image_out_port=self.m_image_out_port,

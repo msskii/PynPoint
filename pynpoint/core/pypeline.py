@@ -21,7 +21,7 @@ from typeguard import typechecked
 import pynpoint
 
 from pynpoint.core.attributes_JWST import get_attributes
-from pynpoint.core.dataio import DataStorage
+from pynpoint.core.dataio import DataStorage, InputPort
 from pynpoint.core.processing import ProcessingModule, PypelineModule, ReadingModule, WritingModule
 from pynpoint.util.module import input_info, module_info, output_info
 from pynpoint.util.type_aliases import NonStaticAttribute, StaticAttribute
@@ -110,10 +110,44 @@ class Pypeline:
 
         hdf5_path = os.path.join(self._m_working_place, 'PynPoint_database.hdf5')
         self.m_data_storage = DataStorage(hdf5_path)
+        self._m_input_ports = {}
 
         print(f'Database: {self.m_data_storage._m_location}')
 
         self._config_init()
+
+    @typechecked
+    def add_input_port(self,
+                       tag: str) -> InputPort:
+        """
+        Function which creates an InputPort for a ProcessingModule and appends it to the internal
+        InputPort dictionary. This function should be used by classes inheriting from
+        ProcessingModule to make sure that only input ports with unique tags are added. The new
+        port can be used as: ::
+
+             port = self._m_input_ports[tag]
+
+        or by using the returned Port.
+
+        Parameters
+        ----------
+        tag : str
+            Tag of the new input port.
+
+        Returns
+        -------
+        pynpoint.core.dataio.InputPort
+            The new InputPort for the ProcessingModule.
+        """
+
+        port = InputPort(tag)
+
+        if self.m_data_storage is not None:
+            port.set_database_connection(self.m_data_storage)
+
+        self._m_input_ports[tag] = port
+
+        return port    
 
     @typechecked
     def __setattr__(self,
@@ -658,6 +692,33 @@ class Pypeline:
             attr = np.asarray(attr)
 
         self.m_data_storage.close_connection()
+
+        return attr
+    
+    @typechecked
+    def get_JWST_attribute(self,
+                      image_in_tag: str,
+                      attr_name: str) -> Union[StaticAttribute, NonStaticAttribute]:
+        """
+        Method for reading an attribute from the database if the attribute is saved as an array.
+
+        Parameters
+        ----------
+        data_tag : str
+            Database tag.
+        attr_name : str
+            Name of the attribute.
+
+        Returns
+        -------
+        StaticAttribute, NonStaticAttribute
+            Attribute value. For a static attribute, a single value is returned. For a non-static
+            attribute, an array of values is returned.
+        """
+
+        self.m_image_in_port = self.add_input_port(image_in_tag)
+
+        attr = self.m_image_in_port.get_attribute(attr_name)
 
         return attr
 

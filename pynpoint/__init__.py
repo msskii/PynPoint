@@ -78,6 +78,8 @@ from pynpoint.processing.timedenoising import CwtWaveletConfiguration, \
                                               WaveletTimeDenoisingModule, \
                                               TimeNormalizationModule
 
+from pynpoint.processing.PaddingModule import PaddingModule
+
 from pynpoint.readwrite.attr_reading import AttributeReadingModule, \
                                             ParangReadingModule, \
                                             WavelengthReadingModule
