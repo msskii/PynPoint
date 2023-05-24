@@ -280,6 +280,9 @@ class FitCenterModule(ProcessingModule):
         memory = self._m_config_port.get_attribute('MEMORY')
         cpu = self._m_config_port.get_attribute('CPU')
         pixscale = self.m_image_in_port.get_attribute('PIXSCALE')[0]
+        if isinstance(pixscale,np.ndarray):
+            # For now we just take the first pixscale
+            pixscale = pixscale.astype(np.float64)[0]
         wavelength = self.m_image_in_port.get_attribute('WAV_INCR')
         if cpu > 1 and self.m_mask_out_port is not None:
             warnings.warn('The mask_out_port can only be used if CPU=1. No data will be '
