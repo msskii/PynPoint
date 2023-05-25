@@ -382,7 +382,7 @@ class ShiftImagesModule(ProcessingModule):
                  name_in: str,
                  image_in_tag: str,
                  image_out_tag: str,
-                 shift_xy: Union[Tuple[float, float], str],
+                 shift_xy: Union[Tuple[float, float], str, np.ndarray],
                  interpolation: str = 'spline') -> None:
         """
         Parameters
@@ -393,9 +393,10 @@ class ShiftImagesModule(ProcessingModule):
             Tag of the database entry that is read as input.
         image_out_tag : str
             Tag of the database entry that is written as output.
-        shift_xy : tuple(float, float), str
-            The shift (pix) in x and y direction as (delta_x, delta_y). Or, a database tag with
-            the fit results from the :class:`~pynpoint.processing.centering.FitCenterModule`.
+        shift_xy : tuple(float, float), str, np.ndarray
+            The shift (pix) in x and y direction as (delta_x, delta_y), potentially as an array 
+            for IFS data. Or, a database tag with the fit results from 
+            the :class:`~pynpoint.processing.centering.FitCenterModule`.
         interpolation : str
             Interpolation type for shifting of the images ('spline', 'bilinear', or 'fft').
 
@@ -415,7 +416,9 @@ class ShiftImagesModule(ProcessingModule):
         if isinstance(shift_xy, str):
             self.m_fit_in_port = self.add_input_port(shift_xy)
             self.m_shift = None
-
+        elif isinstance(shift_xy, np.ndarray):
+            self.m_fit_in_port = None
+            self.m_shift = np.array([(sh[1], sh[0]) for sh in shift_xy])
         else:
             self.m_fit_in_port = None
             self.m_shift = (shift_xy[1], shift_xy[0])
@@ -461,7 +464,21 @@ class ShiftImagesModule(ProcessingModule):
 
                 mean_shift = np.mean(self.m_shift, axis=0)
                 history = f'shift_xy = {mean_shift[0]:.2f}, {mean_shift[1]:.2f}'
+        
+        elif self.m_fit_in_port is None and isinstance(self.m_shift, np.ndarray):
+            constant = False
+            # if the offset is not constant, then apply the shifts to each frame individually
+            for i, shift in enumerate(self.m_shift):
+                shifted_image = shift_image(self.m_image_in_port[i, ],
+                                            shift,
+                                            self.m_interpolation)
 
+                # append the shifted images to the selt.m_image_out_port database entry
+                self.m_image_out_port.append(shifted_image, data_dim=3)
+
+            mean_shift = np.mean(self.m_shift, axis=0)
+            history = f'shift_xy = {mean_shift[0]:.2f}, {mean_shift[1]:.2f}'
+        
         # apply a constant shift
         if constant:
 
