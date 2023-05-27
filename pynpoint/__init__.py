@@ -103,6 +103,8 @@ from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
 
 from pynpoint.readwrite.JWSTreader import MultiChannelReader
 
+from pynpoint.readwrite.JWSTreflibrary_reader import RefLibraryMultiReader
+
 warnings.simplefilter('always', DeprecationWarning)
 
 __author__ = 'Tomas Stolker & Markus Bonse'

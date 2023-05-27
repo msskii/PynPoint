@@ -17,25 +17,24 @@ import numpy as np
 from astropy.io import fits
 from typeguard import typechecked
 
+from pynpoint.core.dataio import OutputPort
 from pynpoint.core.processing import ReadingModule
 from pynpoint.util.attributes import set_static_attr_JWST, set_nonstatic_attr_JWST, set_extra_attr_JWST
 from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
 from pynpoint.util.module import progress
 
-class MultiChannelReader(ReadingModule):
+class RefLibraryMultiReader(ReadingModule):
     """
-    Reads several FITS files within *input dir* and saves them in the database under
-    the same tag.
+    Creates a reference star library by reading in fits files read in from *input_dir*.
     """
     
     @typechecked
     def __init__(self,
                  name_in: str,
-                 input_dir: Optional[str] = None,
-                 image_tag: str = 'im_arr',
+                 input_dir: str,
+                 library_tag: str = 'library',
                  overwrite: bool = True,
                  check: bool = True,
-                 filenames: Optional[Union[str, List[str]]] = None,
                  collapser: bool = True,
                  ifs_data: bool = False) -> None:
         """
@@ -43,24 +42,17 @@ class MultiChannelReader(ReadingModule):
         ----------
         name_in : str
             Unique name of the module instance.
-        input_dir : str, None
-            Input directory where the FITS files are located. If not specified the Pypeline default
-            directory is used.
-        image_tag : str
-            Tag of the read data in the HDF5 database. Non static header information is stored with
-            the tag: *header_* + image_tag / header_entry_name.
+        input_dir : str
+            Input directory where the FITS files are located. Has to be specified.
+        # TODO: allow for None to be passed as input dir and use Pypeline default input dir
+        library_tag : str
+            Tag of the library.
         overwrite : bool
             Overwrite existing data and header in the central database.
         check : bool
             Print a warning if certain attributes from the configuration file are not present in
             the FITS header. If set to `False`, attributes are still written to the dataset but
             there will be no warning if a keyword is not found in the FITS header.
-        filenames : str, list(str, ), None
-            If a string, then a path of a text file should be provided. This text file should
-            contain a list of FITS files. If a list, then the paths of the FITS files should be
-            provided directly. If set to None, the FITS files in the `input_dir` are read. All
-            paths should be provided either relative to the Python working folder (i.e., the folder
-            where Python is executed) or as absolute paths.
         collapser : bool
             The data is collapsed to the PrimaryHDU if set to True using the PrimaryHDUCombiner module.
         ifs_data : bool
@@ -75,15 +67,42 @@ class MultiChannelReader(ReadingModule):
         """
 
         super().__init__(name_in, input_dir=input_dir)
-
-        self.m_image_out_port = self.add_output_port(image_tag)
+    
+        self.m_star_tags = self.Star_tags(self.m_input_location)    
+        self.m_lib_size = self.Library_size(self.m_input_location)
         
-        self.m_img_tag = image_tag
+        self.m_image_out_port_list = []
+        for i in np.arange(self.m_lib_size):
+            image_tag = self.m_star_tags[i]
+            self.m_image_out_port_list.append(self.add_output_port(image_tag))
+        
+        self.m_lib_tag = library_tag
+        self.m_img_tag = self.Star_name(self.m_input_location)
         self.m_overwrite = overwrite
         self.m_check = check
-        self.m_filenames = filenames
         self.m_collapse = collapser
         self.m_ifs_data = ifs_data
+
+    def Star_tags(self,directory):
+        tags = []
+        for star in os.listdir(directory):
+            if not star.startswith('.') and not star.startswith('temp'):
+                tags.append(star)
+        return tags
+    
+    def Star_name(self,directory):
+        img_tags = []
+        for star in os.listdir(directory):
+            if not star.startswith('.') and not star.startswith('temp'):
+                img_tags.append(self.m_lib_tag+"-"+star)
+        return img_tags
+    
+    def Library_size(self,directory):
+        n = 0
+        for star in os.listdir(directory):
+            if not star.startswith('.') and not star.startswith('temp'):
+                n += 1
+        return n
 
 
     def FillCubesZeros(self,imgs,shape,ch_len):
@@ -129,8 +148,9 @@ class MultiChannelReader(ReadingModule):
 
 
     @typechecked
-    def read_files(self,
+    def read_files(self, ijk: int,
                          files: list,
+                         curr_outport: OutputPort,
                          overwrite_tags: list) -> Tuple[List[str],Dict, tuple, np.ndarray, np.ndarray, np.ndarray]:
         """
         Function which reads a single FITS file and appends it to the database. The function gets
@@ -142,6 +162,8 @@ class MultiChannelReader(ReadingModule):
 
         Parameters
         ----------
+        ijk : int
+            index within ref library stars
         files : str
             Absolute path and filename of the FITS files.
         overwrite_tags : list(str, )
@@ -155,12 +177,10 @@ class MultiChannelReader(ReadingModule):
             header as dictionary
         tuple(int, )
             Image shape.
-        list
+        np.ndarray
             wavelength array
-        list
+        np.ndarray
             channel array
-        list
-            band array
         """
         hdu_lists = []
         imgs = []
@@ -236,12 +256,11 @@ class MultiChannelReader(ReadingModule):
             channel_lengths[i] = headers[j]["NAXIS3"]
         # Total wavelength dimension size of data cube
         N_wave = channel_lengths.sum()
-        
         # array with the wavelengths of each frame saved at the corresponding location
         wavelength_arr = np.zeros(int(N_wave))
         # array with the channel and band of each frame saved at the corresponding location
         channel_arr = np.zeros(int(N_wave),dtype=str)
-        band_arr =  np.zeros(int(N_wave),dtype=str)
+        band_arr =  np.zeros(int(N_wave),dtype=np.dtype('<U6'))
         
         # Determine wavelengths:
         channel_lengths_ind = np.copy(channel_lengths)
@@ -259,9 +278,8 @@ class MultiChannelReader(ReadingModule):
             
             channel = headers[j]["CHANNEL"]
             band = headers[j]["BAND"]
-
-            for j in np.arange(low,high):
-                wavelength_arr[low:high] = np.linspace(start_wav,stop_wav,int(channel_lengths[i]))
+            
+            wavelength_arr[low:high] = np.linspace(start_wav,stop_wav,int(channel_lengths[i]))
             for c in np.arange(high-low):
                 channel_arr[low:high][c] = channel
                 band_arr[low:high][c] = band
@@ -305,7 +323,6 @@ class MultiChannelReader(ReadingModule):
                     card = card.astype('S') # convert to numpy bytes array which is compatible with HDF5 database
                 fits_header.append(f'{key} = {card}')
                 fits_dict[key] = card
-        
         # New attributes:
         fits_header.append(f'WAV_ARR = {wavelength_arr}')
         fits_dict['WAV_ARR'] = wavelength_arr
@@ -323,158 +340,137 @@ class MultiChannelReader(ReadingModule):
             raise ValueError('It is only possible to read 3D or 4D data when ifs_data is set to '
                              'True.')
 
-        if self.m_overwrite and self.m_image_out_port.tag not in overwrite_tags:
-            overwrite_tags.append(self.m_image_out_port.tag)
+        if self.m_overwrite and curr_outport.tag not in overwrite_tags:
+            overwrite_tags.append(curr_outport.tag)
 
             if self.m_ifs_data:
-                self.m_image_out_port.set_all(data_cube, data_dim=4)
+                curr_outport.set_all(data_cube, data_dim=4)
             else:
-                self.m_image_out_port.set_all(data_cube, data_dim=3)
+                curr_outport.set_all(data_cube, data_dim=3)
 
-            self.m_image_out_port.del_all_attributes()
+            curr_outport.del_all_attributes()
 
         else:
             if self.m_ifs_data:
-                self.m_image_out_port.append(data_cube, data_dim=4)
+                curr_outport.append(data_cube, data_dim=4)
             else:
-                self.m_image_out_port.append(data_cube, data_dim=3)
+                curr_outport.append(data_cube, data_dim=3)
 
         hdu_list.close()
         
-        
-        self.m_header_out_port = self.add_output_port('fits_header/'+self.m_img_tag)
+        print(i)
+        self.m_header_out_port = self.add_output_port('fits_header/'+self.m_img_tag[ijk])
         header_out_port = self.m_header_out_port
         header_out_port.set_all(fits_header)
 
         return fits_header, fits_dict, data_cube.shape, wavelength_arr, channel_arr, band_arr
 
-    @typechecked
-    def _txt_file_list(self) -> list:
-        """
-        Internal function to import a list of FITS files from a text file.
-        """
-
-        with open(self.m_filenames) as file_obj:
-            files = file_obj.readlines()
-
-        # remove newlines
-        files = [x.strip() for x in files]
-
-        # remove of empty lines
-        files = filter(None, files)
-
-        return list(files)
 
     @typechecked
     def run(self) -> None:
         """
-        Run method of the module. Looks for all FITS files in the input directory and imports the
+        Run method of the module. Looks for subdirectories in the input directory that should each have
+        a group of FITS files that are each saved under the same tag. It then imports the
         images into the database. Note that previous database information is overwritten if
-        ``overwrite=True``. The filenames are stored as attributes.
+        ``overwrite=True``. The filenames are stored as attributes. This reader does not support
+        the input of filenames, only reads from input_dir (unlike MultiChannelReader or FitsReadingModule)
 
         Returns
         -------
         NoneType
             None
         """
-
-        files = []
-
-        if isinstance(self.m_filenames, str):
-            files = self._txt_file_list()
-
-            for item in files:
-                if not os.path.isfile(item):
-                    raise ValueError(f'The file {item} does not exist. Please check that the '
-                                     f'path is correct.')
-
-        elif isinstance(self.m_filenames, list):
-            files = self.m_filenames
-
-            for item in files:
-                if not os.path.isfile(item):
-                    raise ValueError(f'The file {item} does not exist. Please check that the '
-                                     f'path is correct.')
-
-        elif isinstance(self.m_filenames, type(None)):
-            for filename in os.listdir(self.m_input_location):
-                if filename.endswith('.fits') and not filename.startswith('._'):
-                    files.append(os.path.join(self.m_input_location, filename))
-
-            assert files, 'No FITS files found in %s.' % self.m_input_location
-        
-        if self.m_collapse:
-            tempout = os.path.join(self.m_input_location,"temp")
-            if os.path.isdir(tempout):
-                warnings.warn(f'The temporary folder {tempout} already exists in the input directory.')
-                for char in string.printable:
-                    if os.path.isdir(os.path.join(self.m_input_location,"temp"+char)):
-                        warnings.warn(f'The temporary folder {os.path.join(self.m_input_location,"temp"+char)} already exists in the input directory.')
-                        continue
-                    else:
-                        tempout = os.path.join(self.m_input_location,"temp"+char)
-                        break
-            os.mkdir(tempout) # create a temporary folder for the collapsed data
-            corecollapsesupernova = PrimaryHDUCombiner(name_in = "neutronstar",
-                                                       input_dir = self.m_input_location,
-                                                       output_dir = tempout,
-                                                       filenames = files,
-                                                       change_name = False,
-                                                       overwrite = True)
-        
-            corecollapsesupernova.run()
+        stars = []
+        starnames = []
+        for starname in os.listdir(self.m_input_location):
+            if not starname.startswith('.') and not starname.startswith('temp'):
+                stars.append(os.path.join(self.m_input_location, starname))
+                starnames.append(starname)
+        for i,directory in enumerate(stars):
+            print(f'Reading star with tag {starnames[i]}.')
+            current_outport = self.m_image_out_port_list[i]
             files = []
-            for filename in os.listdir(tempout):
+            for filename in os.listdir(directory):
                 if filename.endswith('.fits') and not filename.startswith('._'):
-                    files.append(os.path.join(tempout, filename))
-        
-            print(f'FITS files have been collapsed to PrimaryHDU and saved to {tempout}.')
-        files.sort()
-        overwrite_tags = []
-        first_index = 0
-        print("Reading all data and headers into Pynpoint.")
-        header,header_dict, shape, wav_arr, chan_arr, band_arr = self.read_files(files,overwrite_tags)
-        
-        if self.m_collapse:
-            shutil.rmtree(tempout) # remove the temporary folder and the collapsed data
-        
-        if len(shape) == 2:
-            nimages = 1
+                    files.append(os.path.join(directory, filename))
+            
+            assert files, 'No FITS files found in %s.' % directory
 
-        elif len(shape) == 3:
-            if self.m_ifs_data:
+        
+            if self.m_collapse:
+                tempout = os.path.join(self.m_input_location,"temp")
+                if os.path.isdir(tempout):
+                    warnings.warn(f'The temporary folder {tempout} already exists in the input directory.')
+                    for char in string.printable:
+                        if os.path.isdir(os.path.join(self.m_input_location,"temp"+char)):
+                            warnings.warn(f'The temporary folder {os.path.join(self.m_input_location,"temp"+char)} already exists in the input directory.')
+                            continue
+                        else:
+                            tempout = os.path.join(self.m_input_location,"temp"+char)
+                            break
+                os.mkdir(tempout) # create a temporary folder for the collapsed data
+                corecollapsesupernova = PrimaryHDUCombiner(name_in = "neutronstar",
+                                                           input_dir = self.m_input_location,
+                                                           output_dir = tempout,
+                                                           filenames = files,
+                                                           change_name = False,
+                                                           overwrite = True)
+            
+                corecollapsesupernova.run()
+                files = []
+                for filename in os.listdir(tempout):
+                    if filename.endswith('.fits') and not filename.startswith('._'):
+                        files.append(os.path.join(tempout, filename))
+            
+                print(f'FITS files have been collapsed to PrimaryHDU and saved to {tempout}.')
+            files.sort()
+            overwrite_tags = []
+            first_index = 0
+            print("Reading all data and headers into Pynpoint.")
+            header,header_dict, shape, wav_arr, chan_arr, band_arr = self.read_files(i,files,current_outport,overwrite_tags)
+            
+            if self.m_collapse:
+                shutil.rmtree(tempout) # remove the temporary folder and the collapsed data
+            
+            if len(shape) == 2:
                 nimages = 1
+    
+            elif len(shape) == 3:
+                if self.m_ifs_data:
+                    nimages = 1
+                else:
+                    nimages = shape[0]
+    
+            elif len(shape) == 4:
+                nimages = shape[1]
+    
             else:
-                nimages = shape[0]
-
-        elif len(shape) == 4:
-            nimages = shape[1]
-
-        else:
-            raise ValueError('Data read from FITS file has an invalid shape.')
-
-        print("Setting attributes in database.")
-        set_static_attr_JWST(fits_file=files[0],
-                        header=header_dict,
-                        config_port=self._m_config_port,
-                        image_out_port=self.m_image_out_port,
-                        check=self.m_check)
-
-        set_nonstatic_attr_JWST(header=header_dict,
+                raise ValueError('Data read from FITS file has an invalid shape.')
+    
+            print("Setting attributes in database.")
+            
+            set_static_attr_JWST(fits_file=files[0],
+                            header=header_dict,
+                            config_port=self._m_config_port,
+                            image_out_port=current_outport,
+                            check=self.m_check)
+    
+            set_nonstatic_attr_JWST(header=header_dict,
+                               config_port=self._m_config_port,
+                               image_out_port=current_outport,
+                               check=self.m_check)
+    
+            wavandchan = [('WAV_ARR',wav_arr),('CHAN_ARR',chan_arr),('BAND_ARR',band_arr)]
+            set_extra_attr_JWST(fits_file=files[0],
+                           nimages=nimages,
                            config_port=self._m_config_port,
-                           image_out_port=self.m_image_out_port,
-                           check=self.m_check)
-
-        wavandchan = [('WAV_ARR',wav_arr),('CHAN_ARR',chan_arr),('BAND_ARR',band_arr)]
-        set_extra_attr_JWST(fits_file=files[0],
-                       nimages=nimages,
-                       config_port=self._m_config_port,
-                       image_out_port=self.m_image_out_port,
-                       first_index=first_index,
-                       optional_attrs=wavandchan)
-
-        first_index += nimages
-
-        self.m_image_out_port.flush()
-
-        self.m_image_out_port.close_port()
+                           image_out_port=current_outport,
+                           first_index=first_index,
+                           optional_attrs=wavandchan)
+    
+            first_index += nimages
+    
+            current_outport.flush()
+    
+            current_outport.close_port()
+            
