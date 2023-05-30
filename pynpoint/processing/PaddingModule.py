@@ -8,13 +8,13 @@ import pdb
 
 class PaddingModule(ProcessingModule):
     """
-    Pipline module for padding two sets of data to the largest size.
+    Pipline module for padding sets of data to the largest image size.
     The padding is performed only in the "last two" axes/dimensions (in case of
     wavelength data or time data in the first axis)
     
     """
     
-    __author__ = "Gian Rungger"
+    __author__ = "Gian Rungger, Keanu Gleixner"
 
     def __init__(self,
                  name_in: str,
@@ -34,15 +34,14 @@ class PaddingModule(ProcessingModule):
         super().__init__(name_in)
 
         self.m_image_in_port_tags_list = image_in_tags
-        
-        self.m_image_in_port_sci = self.add_input_port(image_in_tags[0])
-        self.m_image_in_port_ref = self.add_input_port(image_in_tags[1])
-        
-        
         self.m_image_out_suff = image_out_suff
-        
-        self.m_image_out_port_sci = self.add_output_port(image_in_tags[0]+"_"+image_out_suff)
-        self.m_image_out_port_ref = self.add_output_port(image_in_tags[1]+"_"+image_out_suff)
+
+        self.m_image_in_port_arr = []
+        self.m_image_out_port_arr = []
+
+        for tag in image_in_tags:
+            self.m_image_in_port_arr.append(self.add_input_port(tag))
+            self.m_image_out_port_arr.append(self.add_output_port(tag+"_"+image_out_suff))
         
         
     def padding(self,
@@ -63,44 +62,22 @@ class PaddingModule(ProcessingModule):
     
     def run(self) -> None:
         # pdb.set_trace()
-        shape = (0,0)
-        
-        sci = self.m_image_in_port_sci.get_all()
-        assert len(sci.shape) == 3, "The provided data is not 3dimensional, this module allows only 3d."
-        if shape[0] < sci.shape[1]:
-            better0 = sci.shape[1]
-        else:
-            better0 = shape[0]
-        if shape[1] < sci.shape[2]:
-            better1 = sci.shape[2]
-        else:
-            better1 = shape[1]
-        shape = (better0,better1)
-        ref = self.m_image_in_port_ref.get_all()
-        assert len(ref.shape) == 3, "The provided data is not 3dimensional, this module allows only 3d."
-        if shape[0] < ref.shape[1]:
-            better0 = ref.shape[1]
-        else:
-            better0 = shape[0]
-        if shape[1] < ref.shape[2]:
-            better1 = ref.shape[2]
-        else:
-            better1 = shape[1]
-        shape = (better0,better1)
-        
-        data = self.padding(sci,shape)
-        self.m_image_out_port_sci.set_all(data)
-        self.m_image_out_port_sci.copy_attributes(self.m_image_in_port_sci)
-        print(f'The image {self.m_image_in_port_tags_list[0]} was padded and saved under the tag {self.m_image_in_port_tags_list[0]+"_"+self.m_image_out_suff}.')
-        history = f'zeros padding from {self.m_image_in_port_sci.get_all().shape} to {shape}'
-        self.m_image_out_port_sci.add_history('Padding', history)
-        # self.m_image_out_port_sci.close_port()
-        
-        data = self.padding(ref,shape)
-        self.m_image_out_port_ref.set_all(data)
-        self.m_image_out_port_ref.copy_attributes(self.m_image_in_port_ref)
-        print(f'The image {self.m_image_in_port_tags_list[0]} was padded and saved under the tag {self.m_image_in_port_tags_list[0]+"_"+self.m_image_out_suff}.')
-        history = f'zeros padding from {self.m_image_in_port_ref.get_all().shape} to {shape}'
-        self.m_image_out_port_ref.add_history('Padding', history)
-        self.m_image_out_port_ref.close_port()
-        self.m_image_out_port_sci.close_port()
+        shape = [0,0]
+        for port in self.m_image_in_port_arr:
+            port_shape = port.get_shape()
+            print(port_shape)
+            assert len(port_shape) == 3, "The provided data is not 3dimensional, this module allows only 3d."
+            shape[0] = max(shape[0], port_shape[1])
+            shape[1] = max(shape[1], port_shape[2])
+
+        for index in range(len(self.m_image_in_port_arr)):
+            data = self.m_image_in_port_arr[index].get_all()
+            data_padded = self.padding(data,shape)
+            self.m_image_out_port_arr[index].set_all(data_padded)
+            self.m_image_out_port_arr[index].copy_attributes(self.m_image_in_port_arr[index])
+            print(f'The image {self.m_image_in_port_tags_list[index]} was padded and saved under the tag {self.m_image_in_port_tags_list[index] + "_" + self.m_image_out_suff}.')
+            history = f'zeros padding from {self.m_image_in_port_arr[index].get_shape()} to {shape}'
+            self.m_image_out_port_arr[index].add_history('Padding', history)
+
+        for port in self.m_image_out_port_arr:
+            port.close_port()
