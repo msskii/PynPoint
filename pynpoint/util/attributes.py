@@ -223,12 +223,7 @@ def set_static_attr_JWST(fits_file: str,
                 status = image_out_port.check_static_attribute(attr, header[fitskey])
 
                 if status == 1:
-                    if isinstance(header[fitskey],np.ndarray):
-                        val = header[fitskey].astype('S')
-                    # elif isinstance(header[fitskey],str):
-                    #     val = bytes(header[fitskey],'utf-8')
-                    else:
-                        val = header[fitskey]
+                    val = header[fitskey]
                     image_out_port.add_attribute(attr, val, static=True)
 
                 elif status == 0:
@@ -283,10 +278,7 @@ def set_nonstatic_attr_JWST(header: Dict,
 
             if fitskey != 'None':
                 if fitskey in header:
-                    if isinstance(header[fitskey],np.ndarray):
-                        val = header[fitskey].astype('S')
-                    else:
-                        val = header[fitskey]
+                    val = header[fitskey]
                     image_out_port.append_attribute_data(attr, val)
 
                 elif header['NAXIS'] == 2 and attr == 'NFRAMES':
@@ -339,10 +331,6 @@ def set_extra_attr_JWST(fits_file: str,
     image_out_port.append_attribute_data('FILES', fits_file)
 
     for (key,value) in optional_attrs:
-        if isinstance(value,np.ndarray):
-            val = value.astype('S')
-        else:
-            val = value
-        image_out_port.append_attribute_data(key,val)
+        image_out_port.append_attribute_data(key,value)
 
     return first_index + nimages

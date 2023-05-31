@@ -240,8 +240,8 @@ class MultiChannelReader(ReadingModule):
         # array with the wavelengths of each frame saved at the corresponding location
         wavelength_arr = np.zeros(int(N_wave))
         # array with the channel and band of each frame saved at the corresponding location
-        channel_arr = np.zeros(int(N_wave),dtype=str)
-        band_arr =  np.zeros(int(N_wave),dtype=str)
+        channel_arr = np.zeros(int(N_wave))
+        band_arr =  np.zeros(int(N_wave),dtype=object)
         
         # Determine wavelengths:
         channel_lengths_ind = np.copy(channel_lengths)
