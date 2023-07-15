@@ -103,6 +103,10 @@ from pynpoint.readwrite.primaryhducombiner import PrimaryHDUCombiner
 
 from pynpoint.readwrite.JWSTreader import MultiChannelReader
 
+from pynpoint.readwrite.datacubereplacer import DataCubeReplacer
+
+from pynpoint.readwrite.arrayreading import ArrayReadingModule
+
 from pynpoint.readwrite.JWSTreflibrary_reader import RefLibraryMultiReader
 
 warnings.simplefilter('always', DeprecationWarning)

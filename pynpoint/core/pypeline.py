@@ -696,11 +696,13 @@ class Pypeline:
         return attr
     
     @typechecked
-    def get_JWST_attribute(self,
-                      image_in_tag: str,
-                      attr_name: str) -> Union[StaticAttribute, NonStaticAttribute]:
+    def get_attribute_full_len(self,
+                      data_tag: str,
+                      attr_name: str,
+                      static: bool = True) -> Union[StaticAttribute, NonStaticAttribute]:
         """
-        Method for reading an attribute from the database if the attribute is saved as an array.
+        Method for reading an attribute from the database and returning it at the full wavelength length
+        i.e. it returns an array with the attribute value for each wavelength of the data_tag
 
         Parameters
         ----------
@@ -708,6 +710,8 @@ class Pypeline:
             Database tag.
         attr_name : str
             Name of the attribute.
+        static : bool
+            Static (True) or non-static attribute (False).
 
         Returns
         -------
@@ -715,12 +719,44 @@ class Pypeline:
             Attribute value. For a static attribute, a single value is returned. For a non-static
             attribute, an array of values is returned.
         """
+        
+        self.m_data_storage.open_connection()
 
-        self.m_image_in_port = self.add_input_port(image_in_tag)
+        if static:
+            attr = self.m_data_storage.m_data_bank[data_tag].attrs[attr_name]
 
-        attr = self.m_image_in_port.get_attribute(attr_name)
+        else:
+            attr = self.m_data_storage.m_data_bank[f'header_{data_tag}/{attr_name}']
+            attr = np.asarray(attr)
 
-        return attr
+        self.m_data_storage.close_connection()  
+        attr_val = attr[0]
+
+        if isinstance(attr_val,np.ndarray):
+            bands = self.get_attribute(data_tag,"BAND_ARR",static=False)[0]
+            channels = self.get_attribute(data_tag,"CHAN_ARR",static=False)[0]-1
+            Nwav = channels.size
+            bands_ind = np.zeros(Nwav)
+            index = np.zeros(Nwav)
+            attr_val_full = np.zeros(Nwav)
+            for j in np.arange(Nwav):
+                if bands[j] == 'SHORT':
+                    bands_ind[j] = 0
+                if bands[j] == 'MEDIUM':
+                    bands_ind[j] = 1
+                if bands[j] == 'LONG':
+                    bands_ind[j] = 2
+                index[j] = int(channels[j]*3 + bands_ind[j])
+            index_unique,indices = np.unique(index,return_index=True)
+            for j in np.arange(Nwav):
+
+                i = np.where(indices<=j)[0]
+                if i.size == 0:
+                    i = 0
+                else:
+                    i = i[-1]
+                attr_val_full[j] = attr_val[i]
+        return attr_val_full
 
     @typechecked
     def set_attribute(self,

@@ -567,6 +567,77 @@ class InputPort(Port):
             attr_val = attr_val.item()
 
         return attr_val
+    
+    @typechecked
+    def get_attribute_full_len(self,
+                      name: str) -> Optional[Union[StaticAttribute, NonStaticAttribute]]:
+        """
+        Returns an attribute which is connected to the dataset of the port. The function can return
+        static and non-static attributes (static attributes have priority) in an array with an entry
+        for each wavelength. More information about static and non-static attributes can be found 
+        in the class documentation of :class:`~pynpoint.core.dataio.InputPort`.
+
+        Parameters
+        ----------
+        name : str
+            The name of the attribute.
+
+        Returns
+        -------
+        StaticAttribute, NonStaticAttribute, None
+            The attribute value. Returns None if the attribute does not exist.
+        """
+
+        if not self._check_error_cases():
+            attr_val = None
+        else:
+            if name in self._m_data_storage.m_data_bank[self._m_tag].attrs:
+                # static attribute
+                attr_val = self._m_data_storage.m_data_bank[self._m_tag].attrs[name]
+
+            elif 'header_' + self._m_tag + '/' + name in self._m_data_storage.m_data_bank:
+                # non-static attribute
+                attribute = 'header_' + self._m_tag + '/' + name
+                attr_val = np.asarray(self._m_data_storage.m_data_bank[attribute][...])
+
+            else:
+                warnings.warn(f'The attribute \'{name}\' was not found.')
+                attr_val = None
+
+        # Convert numpy types to base types (e.g., np.float64 -> float)
+        if isinstance(attr_val, np.generic):
+            attr_val = attr_val.item()
+        # attr_val = attr_val[0]
+        # import pdb
+        # pdb.set_trace()
+        if isinstance(attr_val,np.ndarray):
+            bands = self.get_attribute("BAND_ARR")
+            channels = self.get_attribute("CHAN_ARR")-1
+            channels_ind = np.unique(channels)
+            Nwav = channels.size
+            bands_ind = np.zeros(Nwav)
+            index = np.zeros(Nwav)
+            attr_val_full = np.zeros(Nwav)
+            for j in np.arange(Nwav):
+                if bands[j] == 'SHORT':
+                    bands_ind[j] = 0
+                if bands[j] == 'MEDIUM':
+                    bands_ind[j] = 1
+                if bands[j] == 'LONG':
+                    bands_ind[j] = 2
+                index[j] = int(channels[j]*3 + bands_ind[j])
+            index_unique,indices = np.unique(index,return_index=True)
+            for j in np.arange(Nwav):
+                i = np.where(indices<=j)[0]
+                if i.size == 0:
+                    i = 0
+                else:
+                    i = i[-1]
+                attr_val_full[j] = attr_val[i]
+        else: 
+            attr_val_full = attr_val
+            print("Warning: ", attr_val, " has type: ", type(attr_val))
+        return attr_val_full
 
     @typechecked
     def get_all_static_attributes(self) -> Optional[Dict[str, StaticAttribute]]:

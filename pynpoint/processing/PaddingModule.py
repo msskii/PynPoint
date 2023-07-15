@@ -19,7 +19,8 @@ class PaddingModule(ProcessingModule):
     def __init__(self,
                  name_in: str,
                  image_in_tags: List[str],
-                 image_out_suff: str) -> None:
+                 image_out_suff: str,
+                 squaring: bool = False) -> None:
         """
         Parameters
         ----------
@@ -35,6 +36,7 @@ class PaddingModule(ProcessingModule):
 
         self.m_image_in_port_tags_list = image_in_tags
         self.m_image_out_suff = image_out_suff
+        self.squaring = squaring
 
         self.m_image_in_port_arr = []
         self.m_image_out_port_arr = []
@@ -47,6 +49,9 @@ class PaddingModule(ProcessingModule):
     def padding(self,
                 data: np.ndarray,
                 shape: Tuple) -> np.ndarray:
+        
+        if self.squaring:
+            shape = (max(shape[0],shape[1]),max(shape[0],shape[1]))
         
         assert data.shape[1]<=shape[0] and data.shape[2]<=shape[1], f'The shape for padding {shape} has to be larger than the given data which has shape {data.shape}.'
         
