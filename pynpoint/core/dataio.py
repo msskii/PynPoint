@@ -608,9 +608,8 @@ class InputPort(Port):
         if isinstance(attr_val, np.generic):
             attr_val = attr_val.item()
         # attr_val = attr_val[0]
-        # import pdb
-        # pdb.set_trace()
         if isinstance(attr_val,np.ndarray):
+            if len(attr_val.shape)==2: attr_val = attr_val[0]
             bands = self.get_attribute("BAND_ARR")
             channels = self.get_attribute("CHAN_ARR")-1
             channels_ind = np.unique(channels)
