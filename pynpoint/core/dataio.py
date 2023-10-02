@@ -611,7 +611,9 @@ class InputPort(Port):
         if isinstance(attr_val,np.ndarray):
             if len(attr_val.shape)==2: attr_val = attr_val[0]
             bands = self.get_attribute("BAND_ARR")
+            if len(bands.shape)==2: bands = bands[0]
             channels = self.get_attribute("CHAN_ARR")-1
+            if len(channels.shape)==2: channels = channels[0]
             channels_ind = np.unique(channels)
             Nwav = channels.size
             bands_ind = np.zeros(Nwav)

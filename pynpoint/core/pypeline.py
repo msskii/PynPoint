@@ -699,7 +699,8 @@ class Pypeline:
     def get_attribute_full_len(self,
                       data_tag: str,
                       attr_name: str,
-                      static: bool = True) -> Union[StaticAttribute, NonStaticAttribute]:
+                      static: bool = True,
+                      decode: Optional[bool] = False) -> Union[StaticAttribute, NonStaticAttribute]:
         """
         Method for reading an attribute from the database and returning it at the full wavelength length
         i.e. it returns an array with the attribute value for each wavelength of the data_tag
@@ -712,6 +713,8 @@ class Pypeline:
             Name of the attribute.
         static : bool
             Static (True) or non-static attribute (False).
+        decode : bool
+            Set to True if np.bytes_ should be decoded to strings.
 
         Returns
         -------
@@ -738,7 +741,7 @@ class Pypeline:
             Nwav = channels.size
             bands_ind = np.zeros(Nwav)
             index = np.zeros(Nwav)
-            attr_val_full = np.zeros(Nwav)
+            attr_val_full = np.zeros(Nwav,dtype=attr_val.dtype)
             for j in np.arange(Nwav):
                 if bands[j] == 'SHORT':
                     bands_ind[j] = 0
@@ -756,6 +759,16 @@ class Pypeline:
                 else:
                     i = i[-1]
                 attr_val_full[j] = attr_val[i]
+            if decode and type(attr_val_full[0]) == np.bytes_:
+                return np.array([val.decode('utf-8') for val in attr_val_full])
+        else:
+            attr_val_full = np.array([],dtype=type(attr_val))
+            channels = self.get_attribute(data_tag,"CHAN_ARR",static=False)[0]-1
+            Nwav = channels.size
+            for i in np.arange(Nwav):
+                attr_val_full = np.append(attr_val_full, attr_val)
+            if decode and type(attr_val_full[0]) == np.bytes_:
+                return np.array([val.decode('utf-8') for val in attr_val_full])
         return attr_val_full
 
     @typechecked

@@ -383,7 +383,8 @@ class ShiftImagesModule(ProcessingModule):
                  image_in_tag: str,
                  image_out_tag: str,
                  shift_xy: Union[Tuple[float, float], str, np.ndarray],
-                 interpolation: str = 'spline') -> None:
+                 interpolation: str = 'spline',
+                 multiproc: bool = False) -> None:
         """
         Parameters
         ----------
@@ -399,14 +400,14 @@ class ShiftImagesModule(ProcessingModule):
             the :class:`~pynpoint.processing.centering.FitCenterModule`.
         interpolation : str
             Interpolation type for shifting of the images ('spline', 'bilinear', or 'fft').
-
+        multiproc: bool
+            Option to supress multiprocessing
         Returns
         -------
         NoneType
             None
         """
-
-        super().__init__(name_in)
+        super().__init__(name_in,multiproc)
 
         self.m_image_in_port = self.add_input_port(image_in_tag)
         self.m_image_out_port = self.add_output_port(image_out_tag)
@@ -434,9 +435,10 @@ class ShiftImagesModule(ProcessingModule):
         NoneType
             None
         """
-
         constant = True
-
+        # import pdb
+        # pdb.set_trace()
+        
         # read the fit results from the self.m_fit_in_port if available
         if self.m_fit_in_port is not None:
 
