@@ -279,11 +279,10 @@ class FitCenterModule(ProcessingModule):
 
         memory = self._m_config_port.get_attribute('MEMORY')
         cpu = self._m_config_port.get_attribute('CPU')
-        pixscale = self.m_image_in_port.get_attribute('PIXSCALE')[0]
-        if isinstance(pixscale,np.ndarray):
+        pixscale = self.m_image_in_port.get_attribute('PIXSCALE')
+        if isinstance(pixscale, np.ndarray):
             # For now we just take the first pixscale
             pixscale = pixscale.astype(np.float64)[0]
-        wavelength = self.m_image_in_port.get_attribute('WAV_INCR')
         if cpu > 1 and self.m_mask_out_port is not None:
             warnings.warn('The mask_out_port can only be used if CPU=1. No data will be '
                           'stored to this output port.')
@@ -401,13 +400,13 @@ class ShiftImagesModule(ProcessingModule):
         interpolation : str
             Interpolation type for shifting of the images ('spline', 'bilinear', or 'fft').
         multiproc: bool
-            Option to supress multiprocessing
+            Option to supress multiprocessing. Set to False for supression.
         Returns
         -------
         NoneType
             None
         """
-        super().__init__(name_in,multiproc)
+        super().__init__(name_in, multiproc)
 
         self.m_image_in_port = self.add_input_port(image_in_tag)
         self.m_image_out_port = self.add_output_port(image_out_tag)
@@ -436,9 +435,7 @@ class ShiftImagesModule(ProcessingModule):
             None
         """
         constant = True
-        # import pdb
-        # pdb.set_trace()
-        
+
         # read the fit results from the self.m_fit_in_port if available
         if self.m_fit_in_port is not None:
 
@@ -466,7 +463,7 @@ class ShiftImagesModule(ProcessingModule):
 
                 mean_shift = np.mean(self.m_shift, axis=0)
                 history = f'shift_xy = {mean_shift[0]:.2f}, {mean_shift[1]:.2f}'
-        
+
         elif self.m_fit_in_port is None and isinstance(self.m_shift, np.ndarray):
             constant = False
             # if the offset is not constant, then apply the shifts to each frame individually
@@ -480,7 +477,7 @@ class ShiftImagesModule(ProcessingModule):
 
             mean_shift = np.mean(self.m_shift, axis=0)
             history = f'shift_xy = {mean_shift[0]:.2f}, {mean_shift[1]:.2f}'
-        
+
         # apply a constant shift
         if constant:
 

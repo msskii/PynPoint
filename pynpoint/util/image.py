@@ -220,7 +220,7 @@ def create_mask(im_shape: Tuple[int, int],
     mask = np.ones(im_shape)
     npixx = im_shape[0]
     npixy = im_shape[1]
-    
+
     def create_grid(npix):
         if npix % 2 == 0:
             grid = np.linspace(-npix / 2 + 0.5, npix / 2 - 0.5, npix)
@@ -240,7 +240,7 @@ def create_mask(im_shape: Tuple[int, int],
             mask[rr_grid < size[0]] = 0.
 
         if size[1] is not None:
-            npix = min(npixx,npixy)
+            npix = min(npixx, npixy)
             if size[1] > npix / 2:
                 size = (size[0], npix / 2)
             mask[rr_grid > size[1]] = 0.

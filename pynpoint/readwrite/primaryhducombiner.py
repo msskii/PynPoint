@@ -6,9 +6,7 @@ import os
 import time
 import warnings
 
-from typing import List, Optional, Tuple, Union
-
-import numpy as np
+from typing import List, Optional, Union
 
 from astropy.io import fits
 from typeguard import typechecked
@@ -28,7 +26,7 @@ class PrimaryHDUCombiner(ReadingModule):
     file name if change_name is set to True; 
     old files with the same name are overwritten if overwrite is set to True.
     """
-    
+
     __author__ = 'Gian Rungger'
 
     @typechecked
@@ -36,10 +34,11 @@ class PrimaryHDUCombiner(ReadingModule):
                  name_in: str,
                  input_dir: Optional[str] = None,
                  output_dir: Optional[str] = None,
-                 filenames: Optional[Union[str, List[str]]] = None,
+                 file_list: Union[str, List[str], None] = [],
                  change_name: Optional[bool] = True,
                  overwrite: bool = False,
-                 primarywarn: Optional[bool] = False) -> None:
+                 primarywarn: Optional[bool] = False,
+                 only2hdus: Optional[bool] = True) -> None:
         """
         Parameters
         ----------
@@ -50,19 +49,21 @@ class PrimaryHDUCombiner(ReadingModule):
             directory is used.
         output_dir : str, None
             Output directory where the collapsed FITS files are written to. If not specified 
-            the Pypeline default directory is used.
-        filenames : str, list(str, ), None
-            If a string, then a path of a text file should be provided. This text file should
-            contain a list of FITS files. If a list, then the paths of the FITS files should be
-            provided directly. If set to None, the FITS files in the `input_dir` are read. All
-            paths should be provided either relative to the Python working folder (i.e., the folder
-            where Python is executed) or as absolute paths.
+            the input_dir will be used.
+        file_list : str, list(str, ), None
+            A path to one or a list of paths to several FITS files should be provided.
+            If set to [] or None it will simply read in all files within input_dir.
         change_name : bool
             Prepend "col_" to the filename when saving it to the output directory.
         overwrite : bool
             Overwrite existing data.
         primarywarn : bool
             Warn if no data in PrimaryHDU.
+        only2hdus: bool
+            If it is known that there are only two HDU's this may improve efficiency.
+            If set to False it will forage through all HDU's and look for header data.
+            The pixel data will be taken as the first one to appear when looking
+            through the HDU's.
 
         Returns
         -------
@@ -71,37 +72,22 @@ class PrimaryHDUCombiner(ReadingModule):
         """
 
         super().__init__(name_in, input_dir=input_dir)
-        
-        self.m_output_location = output_dir
-        
-        self.m_filenames = filenames
+
+        if not output_dir:
+            self.m_output_location = input_dir
+        else:
+            self.m_output_location = output_dir
+
+        self.m_filedirs = file_list
         self.m_change_name = change_name
         self.m_overwrite = overwrite
         self.m_primarywarn = primarywarn
-        
-    @typechecked
-    def _txt_file_list(self) -> list:
-        """
-        Internal function to import a list of FITS files from a text file.
-        """
+        self.m_only2hdus = only2hdus
 
-        with open(self.m_filenames) as file_obj:
-            files = file_obj.readlines()
-
-        # remove newlines
-        files = [x.strip() for x in files]
-
-        # remove of empty lines
-        files = filter(None, files)
-
-        return list(files)
-    
-    
-    
     @typechecked
     def collapse_to_PrimaryHDU(self,
                                fits_file: str,
-                               out_path: Optional[str] = None,
+                               out_path: str,
                                overwrite: bool = False) -> None:
         """
         Function that reads in a single FITS file and collapses the data and headers
@@ -112,7 +98,7 @@ class PrimaryHDUCombiner(ReadingModule):
         ----------
         fits_file : str
             Absolute path and filename of the fits file
-        out_path: Optional[str]
+        out_path: str
             Absolute path where the collapsed files are stored.
         overwrite: bool
             Data in the out_path with the same name are appended if overwrite 
@@ -123,58 +109,53 @@ class PrimaryHDUCombiner(ReadingModule):
             Collapsed header is returned.
 
         """
-        
+
         hdu_list = fits.open(fits_file)
         n = len(hdu_list)
         if self.m_change_name:
             filename = "col_" + os.path.basename(fits_file)
         else:
             filename = os.path.basename(fits_file)
-        
-        assert n>0, f'The file {fits_file} did not contain any data. '
-        
+
+        assert n > 0, f'The file {fits_file} did not contain any data. '
+
         hdr = fits.Header()
-        
+
         if hdu_list[0].data is not None:
             images = hdu_list[0].data.byteswap().newbyteorder()
-            theone = 0
-            
-        elif len(hdu_list) > 1:
+
+        elif n > 1:
             for i, item in enumerate(hdu_list[1:]):
-                if isinstance(item, fits.hdu.image.ImageHDU):
+                if isinstance(item, fits.hdu.image.ImageHDU) or hdu_list[i+1].data is not None:
                     if self.m_primarywarn:
                         warnings.simplefilter('always', UserWarning)
-    
+
                         warnings.warn(f"No data was found in the PrimaryHDU "
                                       f"so reading data from the ImageHDU "
                                       f"at number {i+1} instead.")
 
                     images = hdu_list[i+1].data.byteswap().newbyteorder()
-                    theone = i+1
-
                     break
-        
-        if theone == 0:
-            k = 1
-        else:
-            k = 0
-        if len(hdu_list[theone].header) > 0:
-            hdr.extend(hdu_list[theone].header,unique=True)
-        if len(hdu_list) > 1 and len(hdu_list[k].header) > 0:
-            hdr.extend(hdu_list[k].header,unique=True)
+
+        for i, n_hdu in enumerate(hdu_list):
+            if self.m_only2hdus and i > 1:
+                break
+            if len(n_hdu.header) > 0:
+                hdr.extend(n_hdu.header, unique=True)
+
         if len(hdr) == 0:
             raise ValueError(f'No header information found in {fits_file}.')
-        
+
         hdu_list.close()
-        
-        assert os.path.isdir(out_path), f'The data out path: {out_path} , does not exist. '
-        
-        fits.writeto(os.path.join(out_path, filename), 
-                     data = images,
-                     header = hdr,
+
+        assert os.path.isdir(
+            out_path), f'The data out path: {out_path} , does not exist. '
+
+        fits.writeto(os.path.join(out_path, filename),
+                     data=images,
+                     header=hdr,
                      overwrite=overwrite)
-        
-    
+
     def run(self) -> None:
         """
         Run method of the module.
@@ -184,44 +165,21 @@ class PrimaryHDUCombiner(ReadingModule):
         None
         
         """
-        
-        files = []
-
-        if isinstance(self.m_filenames, str):
-            files = self._txt_file_list()
-
-            for item in files:
-                if not os.path.isfile(item):
-                    raise ValueError(f'The file {item} does not exist. Please check that the '
-                                     f'path is correct.')
-
-        elif isinstance(self.m_filenames, list):
-            files = self.m_filenames
-
-            for item in files:
-                if not os.path.isfile(item):
-                    raise ValueError(f'The file {item} does not exist. Please check that the '
-                                     f'path is correct.')
-
-        elif isinstance(self.m_filenames, type(None)):
+        files = self.m_filedirs
+        if not files:  # if no files are given, FITS files will be searched for in the input directory
+            if files == None:
+                files = []
             for filename in os.listdir(self.m_input_location):
                 if filename.endswith('.fits') and not filename.startswith('._'):
                     files.append(os.path.join(self.m_input_location, filename))
 
-            assert files, 'No FITS files found in %s.' % self.m_input_location
-        
-        files.sort()
+            assert files, 'No FITS files were provided and none were found in %s.' % self.m_input_location
 
-        first_index = 0
+        files.sort()
 
         start_time = time.time()
         for i, fits_file in enumerate(files):
             progress(i, len(files), 'Collapsing FITS files...', start_time)
 
-            self.collapse_to_PrimaryHDU(fits_file, self.m_output_location, self.m_overwrite)
-
-            first_index += 1
-        
-        
-        
-        
+            self.collapse_to_PrimaryHDU(
+                fits_file, self.m_output_location, self.m_overwrite)

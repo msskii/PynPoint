@@ -1,26 +1,18 @@
 """
-Module for reading FITS files.
+Module for reading arrays into the database.
 """
-
-import os
-import time
-import warnings
-
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 import numpy as np
-
-from astropy.io import fits
 from typeguard import typechecked
 
 from pynpoint.core.processing import ReadingModule
-from pynpoint.util.attributes import set_static_attr, set_nonstatic_attr_JWST, set_extra_attr
-from pynpoint.util.module import progress
+from pynpoint.util.attributes import set_static_attr, set_nonstatic_attr, set_extra_attr
 
 
 class ArrayReadingModule(ReadingModule):
     """
-    Reads a numpy array into the database. Header information can be added to the database entry.
+    Module for manually reading both a dataset and header information into the pypeline database.
     """
 
     __author__ = 'Gian Rungger'
@@ -37,38 +29,33 @@ class ArrayReadingModule(ReadingModule):
                  filenames: Optional[Union[str, List[str]]] = None,
                  ifs_data: bool = False) -> None:
         """
+
         Parameters
         ----------
         name_in : str
-            Unique name of the module instance.
-        input_dir : str, None
-            Input directory where the FITS files are located. If not specified the Pypeline default
-            directory is used.
-        array_star: np.ndarray
-        image_tag : str
-            Tag of the read data in the HDF5 database. Non static header information is stored with
-            the tag: *header_* + image_tag / header_entry_name.
-        overwrite : bool
-            Overwrite existing data and header in the central database.
-        check : bool
-            Print a warning if certain attributes from the configuration file are not present in
-            the FITS header. If set to `False`, attributes are still written to the dataset but
-            there will be no warning if a keyword is not found in the FITS header.
-        filenames : str, list(str, ), None
-            If a string, then a path of a text file should be provided. This text file should
-            contain a list of FITS files. If a list, then the paths of the FITS files should be
-            provided directly. If set to None, the FITS files in the `input_dir` are read. All
-            paths should be provided either relative to the Python working folder (i.e., the folder
-            where Python is executed) or as absolute paths.
-        ifs_data : bool
-            Import IFS data which is stored as a 4D array with the wavelength and temporal
-            dimensions as first and second dimension, respectively. If set to ``False`` (default),
-            the data is imported as a 3D array with the temporal dimension as first dimension.
+            DESCRIPTION.
+        array_star : np.ndarray
+            DESCRIPTION.
+        header : dict
+            DESCRIPTION.
+        input_dir : Optional[str], optional
+            DESCRIPTION. The default is None.
+        image_tag : str, optional
+            DESCRIPTION. The default is 'im_arr'.
+        overwrite : bool, optional
+            DESCRIPTION. The default is True.
+        check : bool, optional
+            DESCRIPTION. The default is True.
+        filenames : Optional[Union[str, List[str]]], optional
+            DESCRIPTION. The default is None.
+        ifs_data : bool, optional
+            DESCRIPTION. The default is False.
 
         Returns
         -------
-        NoneType
-            None
+        None
+            DESCRIPTION.
+
         """
 
         super().__init__(name_in, input_dir=input_dir)
@@ -94,11 +81,8 @@ class ArrayReadingModule(ReadingModule):
             None
         """
 
-        overwrite_tags = [] 
         array_star = self.array_star
-        if self.m_overwrite and self.m_image_out_port.tag not in overwrite_tags:
-            overwrite_tags.append(self.m_image_out_port.tag)
-        
+        if self.m_overwrite:
             dim = len(array_star.shape)
             self.m_image_out_port.set_all(array_star, data_dim=dim)
             self.m_image_out_port.del_all_attributes()
@@ -107,14 +91,48 @@ class ArrayReadingModule(ReadingModule):
             self.m_image_out_port.append(array_star, data_dim=dim)
             
                 
+            
         # self.m_header_out_port = self.add_output_port('fits_header/'+self.m_img_tag)
         # header_out_port = self.m_header_out_port
         # header_out_port.set_all(fits_header)
+        shape = array_star.shape
+        if len(shape) == 2:
+            nimages = 1
+
+        elif len(shape) == 3:
+            if self.m_ifs_data:
+                nimages = 1
+            else:
+                nimages = shape[0]
+
+        elif len(shape) == 4:
+            nimages = shape[1]
+
+        else:
+            raise ValueError('Data read from FITS file has an invalid shape.')
         
-        set_nonstatic_attr_JWST(header=self.header,
-                           config_port=self._m_config_port,
-                           image_out_port=self.m_image_out_port,
-                           check=False)
+        set_static_attr(fits_file="Read-in Array", 
+                        header=self.header, 
+                        config_port=self._m_config_port, 
+                        image_out_port=self.m_image_out_port,
+                        instrument_key="MIRI")
+        
+        set_nonstatic_attr(header=self.header, 
+                           config_port=self._m_config_port, 
+                           image_out_port=self.m_image_out_port, 
+                           instrument_key="MIRI")
+        
+        set_extra_attr(fits_file="Read-in Array", 
+                       nimages=nimages, 
+                       config_port=self._m_config_port, 
+                       image_out_port=self.m_image_out_port, 
+                       first_index=0, 
+                       instrument_key="MIRI")
+        
+        # (header=self.header,
+        #                    config_port=self._m_config_port,
+        #                    image_out_port=self.m_image_out_port,
+        #                    check=False)
         
 
         self.m_image_out_port.flush()

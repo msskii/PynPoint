@@ -570,7 +570,7 @@ class InputPort(Port):
     
     @typechecked
     def get_attribute_full_len(self,
-                      name: str) -> Optional[Union[StaticAttribute, NonStaticAttribute]]:
+                               name: str) -> Optional[Union[StaticAttribute, NonStaticAttribute]]:
         """
         Returns an attribute which is connected to the dataset of the port. The function can return
         static and non-static attributes (static attributes have priority) in an array with an entry
@@ -598,27 +598,22 @@ class InputPort(Port):
             elif 'header_' + self._m_tag + '/' + name in self._m_data_storage.m_data_bank:
                 # non-static attribute
                 attribute = 'header_' + self._m_tag + '/' + name
-                attr_val = np.asarray(self._m_data_storage.m_data_bank[attribute][...])
+                attr_val = np.asarray(
+                    self._m_data_storage.m_data_bank[attribute][...])
 
             else:
                 warnings.warn(f'The attribute \'{name}\' was not found.')
                 attr_val = None
 
-        # Convert numpy types to base types (e.g., np.float64 -> float)
-        if isinstance(attr_val, np.generic):
-            attr_val = attr_val.item()
-        # attr_val = attr_val[0]
-        if isinstance(attr_val,np.ndarray):
-            if len(attr_val.shape)==2: attr_val = attr_val[0]
+        if isinstance(attr_val, np.ndarray):
             bands = self.get_attribute("BAND_ARR")
-            if len(bands.shape)==2: bands = bands[0]
             channels = self.get_attribute("CHAN_ARR")-1
-            if len(channels.shape)==2: channels = channels[0]
-            channels_ind = np.unique(channels)
             Nwav = channels.size
+            if attr_val.size == Nwav:
+                return attr_val
             bands_ind = np.zeros(Nwav)
             index = np.zeros(Nwav)
-            attr_val_full = np.zeros(Nwav)
+            attr_val_full = np.zeros(Nwav, dtype=attr_val.dtype)
             for j in np.arange(Nwav):
                 if bands[j] == 'SHORT':
                     bands_ind[j] = 0
@@ -627,17 +622,24 @@ class InputPort(Port):
                 if bands[j] == 'LONG':
                     bands_ind[j] = 2
                 index[j] = int(channels[j]*3 + bands_ind[j])
-            index_unique,indices = np.unique(index,return_index=True)
+            index_unique, indices = np.unique(index, return_index=True)
             for j in np.arange(Nwav):
-                i = np.where(indices<=j)[0]
+                i = np.where(indices <= j)[0]
                 if i.size == 0:
                     i = 0
                 else:
                     i = i[-1]
                 attr_val_full[j] = attr_val[i]
-        else: 
-            attr_val_full = attr_val
-            print("Warning: ", attr_val, " has type: ", type(attr_val))
+            if type(attr_val_full[0]) == np.bytes_:
+                return np.array([val.decode('utf-8') for val in attr_val_full])
+        else:
+            attr_val_full = np.array([], dtype=type(attr_val))
+            channels = self.get_attribute("CHAN_ARR")-1
+            Nwav = channels.size
+            for i in np.arange(Nwav):
+                attr_val_full = np.append(attr_val_full, attr_val)
+            if type(attr_val_full[0]) == np.bytes_:
+                return np.array([val.decode('utf-8') for val in attr_val_full])
         return attr_val_full
 
     @typechecked
@@ -950,7 +952,12 @@ class OutputPort(Port):
         NoneType
             None
         """
-
+        # =============================================================================
+        # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
+        if type(data) == np.ndarray or type(data) == list:
+            if len(data.shape) == 2 and data.shape[0] == 1:
+                data = data[0]
+        # =============================================================================
         # check if database entry is new...
         if tag not in self._m_data_storage.m_data_bank:
             # YES -> database entry is new
@@ -1303,14 +1310,12 @@ class OutputPort(Port):
         NoneType
             None
         """
-
         if self._check_status_and_activate() and input_port.tag != self._m_tag:
 
             # link non-static attributes
             if 'header_' + input_port.tag + '/' in self._m_data_storage.m_data_bank:
 
-                for attr_name, attr_data in self._m_data_storage\
-                        .m_data_bank['header_' + input_port.tag + '/'].items():
+                for attr_name, attr_data in self._m_data_storage.m_data_bank['header_' + input_port.tag].items():
 
                     database_name = 'header_'+self._m_tag+'/'+attr_name
 

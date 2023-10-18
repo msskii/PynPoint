@@ -356,7 +356,7 @@ class ProcessingModule(PypelineModule, metaclass=ABCMeta):
     @typechecked
     def __init__(self,
                  name_in: str,
-                 parallelproc_possible: Optional[bool]=True) -> None:
+                 parallelproc_possible: Optional[bool] = True) -> None:
         """
         Abstract constructor of a ProcessingModule which needs the unique name identifier as input
         (more information: :class:`pynpoint.core.processing.PypelineModule`). Call this function in
@@ -366,6 +366,9 @@ class ProcessingModule(PypelineModule, metaclass=ABCMeta):
         ----------
         name_in : str
              The name of the ProcessingModule.
+        parallelproc_possible : bool
+            Variable to manually supress multi-processing. 
+            Set to False if multi-processing should be supressed.
         """
 
         super().__init__(name_in)
@@ -572,10 +575,10 @@ class ProcessingModule(PypelineModule, metaclass=ABCMeta):
 
         memory = self._m_config_port.get_attribute('MEMORY')
         cpu = self._m_config_port.get_attribute('CPU')
-        
+
         if not self._m_multiproc:
-            cpu = 1 # supress multiprocessing
-        
+            cpu = 1  # supress multiprocessing
+
         nimages = image_in_port.get_shape()[0]
 
         if memory == 0:

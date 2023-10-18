@@ -20,7 +20,7 @@ from typeguard import typechecked
 
 import pynpoint
 
-from pynpoint.core.attributes_JWST import get_attributes
+from pynpoint.core.attributes import get_attributes
 from pynpoint.core.dataio import DataStorage, InputPort
 from pynpoint.core.processing import ProcessingModule, PypelineModule, ReadingModule, WritingModule
 from pynpoint.util.module import input_info, module_info, output_info
@@ -115,39 +115,6 @@ class Pypeline:
         print(f'Database: {self.m_data_storage._m_location}')
 
         self._config_init()
-
-    @typechecked
-    def add_input_port(self,
-                       tag: str) -> InputPort:
-        """
-        Function which creates an InputPort for a ProcessingModule and appends it to the internal
-        InputPort dictionary. This function should be used by classes inheriting from
-        ProcessingModule to make sure that only input ports with unique tags are added. The new
-        port can be used as: ::
-
-             port = self._m_input_ports[tag]
-
-        or by using the returned Port.
-
-        Parameters
-        ----------
-        tag : str
-            Tag of the new input port.
-
-        Returns
-        -------
-        pynpoint.core.dataio.InputPort
-            The new InputPort for the ProcessingModule.
-        """
-
-        port = InputPort(tag)
-
-        if self.m_data_storage is not None:
-            port.set_database_connection(self.m_data_storage)
-
-        self._m_input_ports[tag] = port
-
-        return port    
 
     @typechecked
     def __setattr__(self,
@@ -697,13 +664,13 @@ class Pypeline:
     
     @typechecked
     def get_attribute_full_len(self,
-                      data_tag: str,
-                      attr_name: str,
-                      static: bool = True,
-                      decode: Optional[bool] = False) -> Union[StaticAttribute, NonStaticAttribute]:
+                               data_tag: str,
+                               attr_name: str,
+                               static: bool = True) -> Union[StaticAttribute, NonStaticAttribute]:
         """
-        Method for reading an attribute from the database and returning it at the full wavelength length
-        i.e. it returns an array with the attribute value for each wavelength of the data_tag
+        Method for reading an attribute from the database and returning it at 
+        the full wavelength length i.e. it returns an array with the attribute value 
+        for each wavelength of the data cube saved under data_tag.
 
         Parameters
         ----------
@@ -713,8 +680,6 @@ class Pypeline:
             Name of the attribute.
         static : bool
             Static (True) or non-static attribute (False).
-        decode : bool
-            Set to True if np.bytes_ should be decoded to strings.
 
         Returns
         -------
@@ -722,26 +687,26 @@ class Pypeline:
             Attribute value. For a static attribute, a single value is returned. For a non-static
             attribute, an array of values is returned.
         """
-        
         self.m_data_storage.open_connection()
 
         if static:
-            attr = self.m_data_storage.m_data_bank[data_tag].attrs[attr_name]
+            attr_val = self.m_data_storage.m_data_bank[data_tag].attrs[attr_name]
 
         else:
             attr = self.m_data_storage.m_data_bank[f'header_{data_tag}/{attr_name}']
-            attr = np.asarray(attr)
+            attr_val = np.asarray(attr)
 
-        self.m_data_storage.close_connection()  
-        attr_val = attr[0]
+        self.m_data_storage.close_connection()
 
-        if isinstance(attr_val,np.ndarray):
-            bands = self.get_attribute(data_tag,"BAND_ARR",static=False)[0]
-            channels = self.get_attribute(data_tag,"CHAN_ARR",static=False)[0]-1
+        if isinstance(attr_val, np.ndarray):
+            bands = self.get_attribute(data_tag, "BAND_ARR", static=False)
+            channels = self.get_attribute(data_tag, "CHAN_ARR", static=False)-1
             Nwav = channels.size
+            if attr_val.size == Nwav:
+                return attr_val
             bands_ind = np.zeros(Nwav)
             index = np.zeros(Nwav)
-            attr_val_full = np.zeros(Nwav,dtype=attr_val.dtype)
+            attr_val_full = np.zeros(Nwav, dtype=attr_val.dtype)
             for j in np.arange(Nwav):
                 if bands[j] == 'SHORT':
                     bands_ind[j] = 0
@@ -750,24 +715,23 @@ class Pypeline:
                 if bands[j] == 'LONG':
                     bands_ind[j] = 2
                 index[j] = int(channels[j]*3 + bands_ind[j])
-            index_unique,indices = np.unique(index,return_index=True)
+            index_unique, indices = np.unique(index, return_index=True)
             for j in np.arange(Nwav):
-
-                i = np.where(indices<=j)[0]
+                i = np.where(indices <= j)[0]
                 if i.size == 0:
                     i = 0
                 else:
                     i = i[-1]
                 attr_val_full[j] = attr_val[i]
-            if decode and type(attr_val_full[0]) == np.bytes_:
+            if type(attr_val_full[0]) == np.bytes_:
                 return np.array([val.decode('utf-8') for val in attr_val_full])
         else:
-            attr_val_full = np.array([],dtype=type(attr_val))
-            channels = self.get_attribute(data_tag,"CHAN_ARR",static=False)[0]-1
+            attr_val_full = np.array([], dtype=type(attr_val))
+            channels = self.get_attribute(data_tag, "CHAN_ARR", static=False)-1
             Nwav = channels.size
             for i in np.arange(Nwav):
                 attr_val_full = np.append(attr_val_full, attr_val)
-            if decode and type(attr_val_full[0]) == np.bytes_:
+            if type(attr_val_full[0]) == np.bytes_:
                 return np.array([val.decode('utf-8') for val in attr_val_full])
         return attr_val_full
 
