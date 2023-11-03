@@ -565,7 +565,20 @@ class InputPort(Port):
         # Convert numpy types to base types (e.g., np.float64 -> float)
         if isinstance(attr_val, np.generic):
             attr_val = attr_val.item()
-
+            
+        # =============================================================================
+        # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
+        if type(attr_val) == np.ndarray or type(attr_val) == list:
+            if len(attr_val.shape) == 2 and attr_val.shape[0] == 1:
+                attr_val = attr_val[0]
+        # =============================================================================
+        
+        if isinstance(attr_val,bytes):
+            attr_val = attr_val.decode('UTF-8')
+        if isinstance(attr_val,np.ndarray) and isinstance(attr_val[0],bytes):
+            attr_val = np.asarray([value.decode('UTF-8') for value in attr_val])
+        
+        
         return attr_val
     
     @typechecked
@@ -606,6 +619,12 @@ class InputPort(Port):
                 attr_val = None
 
         if isinstance(attr_val, np.ndarray):
+            # =============================================================================
+            # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
+            if type(attr_val) == np.ndarray or type(attr_val) == list:
+                if len(attr_val.shape) == 2 and attr_val.shape[0] == 1:
+                    attr_val = attr_val[0]
+            # =============================================================================
             bands = self.get_attribute("BAND_ARR")
             channels = self.get_attribute("CHAN_ARR")-1
             Nwav = channels.size
@@ -918,7 +937,7 @@ class OutputPort(Port):
 
             # remove database entry
             del self._m_data_storage.m_data_bank[tag]
-
+        
         # make new database entry
         self._init_dataset(data, tag, data_dim=data_dim)
 
@@ -952,12 +971,12 @@ class OutputPort(Port):
         NoneType
             None
         """
-        # =============================================================================
-        # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
-        if type(data) == np.ndarray or type(data) == list:
-            if len(data.shape) == 2 and data.shape[0] == 1:
-                data = data[0]
-        # =============================================================================
+        # # =============================================================================
+        # # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
+        # if type(data) == np.ndarray or type(data) == list:
+        #     if len(data.shape) == 2 and data.shape[0] == 1:
+        #         data = data[0]
+        # # =============================================================================
         # check if database entry is new...
         if tag not in self._m_data_storage.m_data_bank:
             # YES -> database entry is new
