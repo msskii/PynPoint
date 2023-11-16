@@ -659,6 +659,13 @@ class Pypeline:
             attr = np.asarray(attr)
 
         self.m_data_storage.close_connection()
+        
+        # =============================================================================
+        # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
+        if type(attr) == np.ndarray or type(attr) == list:
+            if len(attr.shape) == 2 and attr.shape[0] == 1:
+                attr = attr[0]
+        # =============================================================================
 
         return attr
     

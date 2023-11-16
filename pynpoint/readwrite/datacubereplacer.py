@@ -10,7 +10,7 @@ import warnings
 
 class DataCubeReplacer(ProcessingModule):
     """
-    Pipline module for replacing the data cube with an inputted array. The header
+    Pipeline module for replacing the data cube with an inputted array. The header
     data will be taken from the original image_in_tag database entry.
     
     """

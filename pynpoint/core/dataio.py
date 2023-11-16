@@ -561,10 +561,6 @@ class InputPort(Port):
             else:
                 warnings.warn(f'The attribute \'{name}\' was not found.')
                 attr_val = None
-
-        # Convert numpy types to base types (e.g., np.float64 -> float)
-        if isinstance(attr_val, np.generic):
-            attr_val = attr_val.item()
             
         # =============================================================================
         # This part was added to make lists in JWST headers be saved as lists (before they were lists of lists)
@@ -578,6 +574,9 @@ class InputPort(Port):
         if isinstance(attr_val,np.ndarray) and isinstance(attr_val[0],bytes):
             attr_val = np.asarray([value.decode('UTF-8') for value in attr_val])
         
+        # Convert numpy types to base types (e.g., np.float64 -> float)
+        if isinstance(attr_val, np.generic):
+            attr_val = attr_val.item()
         
         return attr_val
     
